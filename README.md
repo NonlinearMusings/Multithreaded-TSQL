@@ -124,7 +124,113 @@ end;
 ### Option #2: ExtendedLifetime-Fire-and-Forget
 This pattern establishes a persistent, reusable conversation that must be explictly terminated by a secondary process to reclaim its conversation endpoints.
 
+#### First
+Create a table to reference our conversation and its end points.
+```sql
+create table dbo.TaskingSession
+    (    conversationId    uniqueidentifier    null
+    ,    senderHandle      uniqueidentifier    not null
+    ,    receiverHandle    uniqueidentifier    null
+    );
+```
+#### Sender/Initiator
+Create a dialog with a default lifetime and send a single message, adding code to reuse the existing conversation during subsequent runs
+```sql
+declare @handle           uniqueidentifier
+    ,    @msg             nvarchar(255)
+    ,    @isNewSession    bit = 0;
+
+set @msg = N'<xml>newer message</xml>';
+
+begin transaction;
+
+-- check for existing conversation session
+select @handle = ( select senderHandle from dbo.TaskingSession );
+
+-- create a new conversation, if necessary
+if @handle is null
+begin
+	set @isNewSession = 1;
+
+	begin dialog conversation @handle
+		from service TaskingService
+		to service N'TaskingService'
+		on contract TaskingContract
+		with encryption	= off;
+
+    -- record the sender's conversation handle
+    insert dbo.TaskingSession ( senderHandle ) values ( @handle );
+end;
+
+send on conversation @handle
+	message type TaskingEvent
+	(@msg);
+
+-- record the conversation's id and the receiver's conversation handle
+if @isNewSession = 1
+begin
+	update	ts
+		set	conversationId = se.conversation_id
+		,	receiverHandle = te.conversation_handle
+	from	dbo.TaskingSession				as ts
+	inner	join sys.conversation_endpoints	as se	-- sender endpoint
+		on	conversation_handle = @handle
+		and	se.is_initiator = 1
+	inner	join sys.conversation_endpoints as te	-- target endpoint
+		on	se.conversation_id = te.conversation_id
+		and te.is_initiator = 0;
+end;
+
+commit transaction;
+```
+#### Receiver
+Create an activation stored procedure that receives messages and takes action.
+```sql
+create procedure dbo.ActivateTask
+as
+begin
+    set nocount on;
+    
+    declare  @handle     uniqueidentifier
+        ,    @msg        nvarchar(max)
+        ,    @msgName    sysname;
+    
+    begin transaction;
+    
+    receive	top(1)
+        @handle = conversation_handle
+    ,	@msg	= message_body
+    ,	@msgName= message_type_name
+    from TaskingQueue
+    
+    if @msgName = N'TaskingEvent'
+    begin
+        -- do work
+    end;
+    
+    commit transaction;
+
+end;
+```
+#### Cleanup?
+Should the need arise to shut-down, clean-up or otherwise dispose of the ExtenedLifetime's objects then simply:
+```sql
+-- brute force clean-up all Service Broker conversation endpoints
+declare @handle uniqueidentifier;
+
+while exists( select 1 from sys.conversation_endpoints )
+begin
+	set @handle = ( select top 1 conversation_handle from sys.conversation_endpoints );
+	end conversation @handle with cleanup;
+end;
+
+-- brute force clean-up session tracking
+truncate table dbo.TaskingSession;
+```
+
 ### Appendix
+(of the naysayers ;P)
+
 Remus Rusanu 
 * [Fire and Forget: Good for the military, but not for Service Broker conversations](https://rusanu.com/2006/04/06/fire-and-forget-good-for-the-military-but-not-for-service-broker-conversations/)
 * [How to prevent conversation endpoint leaks](https://rusanu.com/2014/03/31/how-to-prevent-conversation-endpoint-leaks/)
