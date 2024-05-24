@@ -228,7 +228,7 @@ end;
 truncate table dbo.TaskingSession;
 ```
 ### Conclusion
-And there you have it! Two ways to implement a message queue with Service Broker without leaking resources.
+And there you have it: Two ways to implement message queuing in Service Broker without leaking resources while fully realizing parallel, asynchoronous task execution!
 
 Way Cool, huh?
 
