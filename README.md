@@ -227,6 +227,10 @@ end;
 -- brute force clean-up session tracking
 truncate table dbo.TaskingSession;
 ```
+### Conclusion
+And there you have it! Two ways to implement a message queue with Service Broker without leaking resources.
+
+Way Cool, huh?
 
 ### Appendix
 (of the naysayers ;P)
