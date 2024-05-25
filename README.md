@@ -50,11 +50,22 @@ alter queue TaskingQueue with activation
     ,    execute as owner
     );
 
--- create a certificate for the activation stored procedure
+-- create a certificate for use with the activation stored procedure
 create certificate TaskExecutorCertificate
 	encryption by password = 'Ta5k#3x3cut3!'
 	with subject = 'Certificate for Service Broker Activation Stored Procedure';
 
+```
+## Common activation bits...
+(do this **after** implementing one of the options below)
+```sql
+--- assign the certificate to the activation stored procedure
+add signature to dbo.ActivateTask
+	by certificate TaskExecutorCertificate
+	with password = 'Ta5k#3x3cut3!';
+
+-- engage!
+alter queue TaskingQueue with status = on;
 ```
 
 ### Option #1: LimitedLifetime-Fire-and-Forget
@@ -123,6 +134,7 @@ end;
 ```
 ### Option #2: ExtendedLifetime-Fire-and-Forget
 This pattern establishes a persistent, reusable conversation that must be explictly terminated by a secondary process to reclaim its conversation endpoints.
+(Okay, techncially this isn't Fire-and-Forget but logically it is because the sender isn't listening, the receiver isn't ending the conversation and the endpoints will persist until explictly closed.)
 
 #### First
 Create a table to reference our conversation and its end points.
@@ -215,7 +227,7 @@ end;
 #### Cleanup?
 Should the need arise to shut-down, clean-up or otherwise dispose of the ExtenedLifetime's objects then simply:
 ```sql
--- brute force clean-up all Service Broker conversation endpoints
+-- brute force clean-up _ALL_ Service Broker conversation endpoints
 declare @handle uniqueidentifier;
 
 while exists( select 1 from sys.conversation_endpoints )
@@ -224,8 +236,28 @@ begin
 	end conversation @handle with cleanup;
 end;
 
--- brute force clean-up session tracking
+-- brute force clean-up _ALL_ session tracking
 truncate table dbo.TaskingSession;
+
+-- | OR |
+
+-- clean-up a _SPECIFIC_ conversation
+declare  @conversationId    uniqueidentifier
+    ,    @handle            uniqueidentifier;
+
+-- identify the conversation targeted for clean-up
+set @conversationId = '<conversationId>';
+
+-- receiver goes first
+set @handle = ( select receiverHandle from dbo.TrackingSession where conversationId = @conversationId );
+end conversation @handle with cleanup;
+
+-- then the sender/initiator
+set @handle = ( select senderHandle from dbo.TrackingSession where conversationId = @conversationId );
+end conversation @handle with cleanup;
+
+-- remove tracking metadata
+delete dbo.TrackingSession where conversationId = @conversationId;
 ```
 ### Conclusion
 And there you have it: Two ways to implement message queuing in Service Broker without leaking resources while fully realizing parallel, asynchoronous task execution!
@@ -233,7 +265,7 @@ And there you have it: Two ways to implement message queuing in Service Broker w
 Way Cool, huh?
 
 ### Appendix
-(of the naysayers ;P)
+(you'll shoot your eye out... ;P)
 
 Remus Rusanu 
 * [Fire and Forget: Good for the military, but not for Service Broker conversations](https://rusanu.com/2006/04/06/fire-and-forget-good-for-the-military-but-not-for-service-broker-conversations/)
