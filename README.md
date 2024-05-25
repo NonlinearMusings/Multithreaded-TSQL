@@ -17,7 +17,7 @@ First, a few pointers:
 * Messages reflect ACID activities. (This thought will help you discern parallelizable activities and identify any dependencies your stored procedures need to account for)
 * Messages are delivered exactly once.
 * Messages are processed in the order received (The queue is FIFO).
-* Messages ultimately invoke a Service Broker internal activation stored procedure. Using a [Claim-Check pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/claim-check) for the messages, only the information needed to execute a task is enqueued. Implementing a [Facade pattern](https://en.wikipedia.org/wiki/Facade_pattern) in the activation stored procedure guards against poison messages will providing virutally unlimited processing flexibility.
+* Messages ultimately invoke a Service Broker internal activation stored procedure. Using a [Claim-Check pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/claim-check) for the messages, only the information needed to execute a task is enqueued. Implementing a [Facade pattern](https://en.wikipedia.org/wiki/Facade_pattern) in the activation stored procedure guards against poison messages while providing virutally unlimited processing flexibility.
 
 ## Common configuration bits...
 ```sql
@@ -84,10 +84,10 @@ set @msg = N'<xml>test message</xml>';
 begin transaction;
 
 begin dialog conversation @handle
-	from service TaskingService
-	to service N'TaskingService'
-	on contract TaskingContract
-	with
+    from service TaskingService
+    to service N'TaskingService'
+    on contract TaskingContract
+    with
         lifetime    = 60        -- seconds
     ,   encryption  = off;
 
@@ -162,13 +162,13 @@ select @handle = ( select senderHandle from dbo.TaskingSession );
 -- create a new conversation, if necessary
 if @handle is null
 begin
-	set @isNewSession = 1;
+    set @isNewSession = 1;
 
-	begin dialog conversation @handle
-		from service TaskingService
-		to service N'TaskingService'
-		on contract TaskingContract
-		with encryption	= off;
+    begin dialog conversation @handle
+        from service TaskingService
+        to service N'TaskingService'
+        on contract TaskingContract
+        with encryption	= off;
 
     -- record the sender's conversation handle
     insert dbo.TaskingSession ( senderHandle ) values ( @handle );
@@ -181,16 +181,16 @@ send on conversation @handle
 -- record the conversation's id and the receiver's conversation handle
 if @isNewSession = 1
 begin
-	update	ts
-		set	conversationId = se.conversation_id
-		,	receiverHandle = te.conversation_handle
-	from	dbo.TaskingSession				as ts
-	inner	join sys.conversation_endpoints	as se	-- sender endpoint
-		on	conversation_handle = @handle
-		and	se.is_initiator = 1
-	inner	join sys.conversation_endpoints as te	-- target endpoint
-		on	se.conversation_id = te.conversation_id
-		and te.is_initiator = 0;
+    update   ts
+        set  conversationId = se.conversation_id
+        ,    receiverHandle = te.conversation_handle
+    from     dbo.TaskingSession              as ts
+    inner    join sys.conversation_endpoints as se	-- sender endpoint
+        on   conversation_handle = @handle
+        and  se.is_initiator = 1
+    inner    join sys.conversation_endpoints as te	-- target endpoint
+        on   se.conversation_id = te.conversation_id
+        and  te.is_initiator = 0;
 end;
 
 commit transaction;
