@@ -71,7 +71,7 @@ alter queue TaskingQueue with status = on;
 ### Option #1: LimitedLifetime-Fire-and-Forget
 This pattern is self-cleaning and addresses conversation endpoint leaks by:
 * Setting the [BEGIN DIALOG CONVERSATION](https://learn.microsoft.com/en-us/sql/t-sql/statements/begin-dialog-conversation-transact-sql?view=sql-server-ver16)'s LIFETIME parameter to a value, in seconds, that allows your enqueuing process adequate time to complete. This is the 'Fire' part of the pattern as a dialog will be established with the reciever upon executing a subsequent SEND ON CONVERSATION statement. When the dialog's lifetime expires its sender or "initiator" conversation endpoint will be reclaimed thereby closing its side of the dialog. This is the 'Forget' part of the pattern as the sender is no longer able to communicate with the reciever.
-* Adding a check in the activation stored procedure to see if the queue is empty or not. If empty then executing END CONVERSATION it will cause the receiver's conversation endpoint to be reclaimed in 30 minutes.
+* Adding a check in the activation stored procedure to see if the queue is empty or not. If empty then executing END CONVERSATION will cause the receiver's conversation endpoint to be reclaimed in 30 minutes.
 
 #### Sender/Initiator
 Create a dialog with a 60 second lifetime and send a single message.
@@ -115,7 +115,7 @@ begin
         @handle = conversation_handle
     ,	@msg	= message_body
     ,	@msgName= message_type_name
-    from TaskingQueue
+    from TaskingQueue;
     
     if @msgName = N'TaskingEvent'
     begin
@@ -213,7 +213,7 @@ begin
         @handle = conversation_handle
     ,	@msg	= message_body
     ,	@msgName= message_type_name
-    from TaskingQueue
+    from TaskingQueue;
     
     if @msgName = N'TaskingEvent'
     begin
